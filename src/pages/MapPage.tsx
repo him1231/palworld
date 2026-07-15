@@ -161,8 +161,11 @@ export default function MapPage() {
     const map = mapRef.current;
     if (layersRef.current.base) { map.removeLayer(layersRef.current.base); layersRef.current.base = undefined; }
 
+    const imgBounds = regionInfo.imageBounds
+      ? L.latLngBounds([[regionInfo.imageBounds[1], regionInfo.imageBounds[0]], [regionInfo.imageBounds[3], regionInfo.imageBounds[2]]])
+      : bounds;
     if (regionInfo.image) {
-      layersRef.current.base = L.imageOverlay(asset(regionInfo.image), bounds).addTo(map);
+      layersRef.current.base = L.imageOverlay(asset(regionInfo.image), imgBounds).addTo(map);
     } else {
       // no underlay available yet (World Tree) — draw a subtle grid
       const g = L.layerGroup();
@@ -264,7 +267,7 @@ export default function MapPage() {
             fillColor: sel.color, fillOpacity: night ? 0.25 : 0.95,
           }).bindPopup(
             `<div><div class="popup-title">${esc(name)}</div>` +
-            `<div class="popup-sub">Lv ${p[3]}–${p[4]} · ${night ? '夜間限定' : '日夜都出'} · (${Math.round(p[0])}, ${Math.round(p[1])})</div></div>`,
+            `<div class="popup-sub">Lv ${p[3]}–${p[4]} · ${night ? '夜間限定' : '日夜都出'}${p[5] != null ? ` · 出現率約 ${p[5]}%` : ''} · (${Math.round(p[0])}, ${Math.round(p[1])})</div></div>`,
           ).addTo(group);
         }
       }

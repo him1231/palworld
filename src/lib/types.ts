@@ -98,13 +98,15 @@ export interface Region {
   id: RegionId;
   name: string;
   nameZh: string;
-  /** [minX, minY, maxX, maxY] in in-game map coordinates */
+  /** view bounds [minX, minY, maxX, maxY] — covers all data, may exceed the image */
   extent: [number, number, number, number];
+  /** where the underlay image is anchored (game map bounds) */
+  imageBounds: [number, number, number, number];
   image: string | null;
 }
 
-/** [x, y, nightOnly(0|1), minLv, maxLv] */
-export type SpawnPoint = [number, number, 0 | 1, number, number];
+/** [x, y, nightOnly(0|1), minLv, maxLv, groupSharePct] */
+export type SpawnPoint = [number, number, 0 | 1, number, number, number?];
 
 export type SpawnIndex = Record<RegionId, Record<string, number>>;
 

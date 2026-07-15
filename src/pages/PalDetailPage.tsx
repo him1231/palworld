@@ -218,13 +218,15 @@ function MiniSpawnMap({ palId, region }: { palId: string; region: Region }) {
     if (!divRef.current) return;
     const [minX, minY, maxX, maxY] = region.extent;
     const bounds = L.latLngBounds([[minY, minX], [maxY, maxX]]);
+    const ib = region.imageBounds ?? region.extent;
+    const imgBounds = L.latLngBounds([[ib[1], ib[0]], [ib[3], ib[2]]]);
     const map = L.map(divRef.current, {
       crs: L.CRS.Simple, minZoom: -3, maxZoom: 2, zoomSnap: 0.5,
       attributionControl: false, preferCanvas: true,
     });
     mapRef.current = map;
     if (region.image) {
-      L.imageOverlay(asset(region.image), bounds).addTo(map);
+      L.imageOverlay(asset(region.image), imgBounds).addTo(map);
     } else {
       L.rectangle(bounds, { color: '#2c3140', weight: 1, fillColor: '#131722', fillOpacity: 1, interactive: false }).addTo(map);
     }
@@ -237,7 +239,7 @@ function MiniSpawnMap({ palId, region }: { palId: string; region: Region }) {
         L.circleMarker([p[1], p[0]], {
           radius: 4, color: '#0b0d12', weight: 1.5,
           fillColor: p[2] === 1 ? '#6d7ce0' : '#c98500', fillOpacity: 0.9,
-        }).bindPopup(`Lv ${p[3]}–${p[4]} · ${p[2] === 1 ? '夜間限定' : '日夜都出'}`).addTo(mapRef.current);
+        }).bindPopup(`Lv ${p[3]}–${p[4]} · ${p[2] === 1 ? '夜間限定' : '日夜都出'}${p[5] != null ? ` · 出現率約 ${p[5]}%` : ''}`).addTo(mapRef.current);
       }
     }).catch(() => {});
     return () => { alive = false; map.remove(); mapRef.current = null; };

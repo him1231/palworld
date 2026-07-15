@@ -431,12 +431,14 @@ function pinIcon(color, glyph) {
 function buildMap() {
   const reg = D.regions.find(r => r.id === mapState.region);
   const b = L.latLngBounds([[reg.extent[1], reg.extent[0]], [reg.extent[3], reg.extent[2]]]);
+  const ib = reg.imageBounds || reg.extent;
+  const imgB = L.latLngBounds([[ib[1], ib[0]], [ib[3], ib[2]]]);
   if (!MAP) {
     MAP = L.map(document.querySelector('.pw #map'), { crs: L.CRS.Simple, minZoom: -3, maxZoom: 3, zoomSnap: 0.5, attributionControl: false, preferCanvas: true });
     MAP.on('mousemove', e => { document.getElementById('legend').innerHTML = legendHtml('(' + Math.round(e.latlng.lng) + ', ' + Math.round(e.latlng.lat) + ')'); });
   }
   if (layerBase) MAP.removeLayer(layerBase);
-  if (mapState.region === 'palpagos' && MAP_URI) layerBase = L.imageOverlay(MAP_URI, b).addTo(MAP);
+  if (mapState.region === 'palpagos' && MAP_URI) layerBase = L.imageOverlay(MAP_URI, imgB).addTo(MAP);
   else {
     const g = L.layerGroup();
     L.rectangle(b, { color: '#2c3140', weight: 1, fillColor: '#131722', fillOpacity: 1, interactive: false }).addTo(g);

@@ -388,23 +388,62 @@ async function fetchFandomPois() {
 // world units (axis-swapped); scale them to a similar magnitude for display.
 const TREE_SCALE = 1 / 459;
 
-function normalizeSpawns(raw, region) {
+// The palpagos underlay is anchored at ITS OWN coordinate bounds (from the
+// wiki's DataMaps config, see fetchImageCrs) — never at atlas map-metadata,
+// which changed meaning between builds (e.g. 24181105 reports ±1000 while
+// spawn coordinates stay in the ±1954 system).
+const PALPAGOS_IMAGE_BOUNDS_FALLBACK = [-1954.07407407, -1908.61002179, 1200.26143791, 1245.7254902];
+
+async function fetchImageCrs() {
+  try {
+    const api = 'https://palworld.wiki.gg/api.php?action=query&prop=revisions&titles=Map:Fragments/Core&rvslots=main&rvprop=content&format=json&formatversion=2';
+    const res = await getJSON(api);
+    const j = JSON.parse(res.query.pages[0].revisions[0].slots.main.content);
+    const at = j.background.at; // [[x,y] topLeft, [x,y] bottomRight]
+    const xs = [at[0][0], at[1][0]], ys = [at[0][1], at[1][1]];
+    const bounds = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    console.log('  palpagos image CRS from wiki:', bounds.map((v) => Math.round(v)).join(','));
+    return bounds;
+  } catch (e) {
+    console.warn(`  ! image CRS fetch failed (${e.message}) — using known bounds`);
+    return PALPAGOS_IMAGE_BOUNDS_FALLBACK;
+  }
+}
+
+function normalizeSpawns(raw, region, imageBounds) {
   const scale = region === 'tree' ? TREE_SCALE : 1;
   const byPal = new Map();
   const alphas = [];
+  // spawn ids look like "wild-1024-5-Alpaca": entries sharing the spawner group
+  // ("wild-1024") compete by weight — turn weight into a share of its group.
+  const groupTotals = new Map();
+  const groupOf = (s) => s.id.split('-').slice(0, 2).join('-');
+  for (const s of raw.spawns) {
+    if (s.kind === 'alpha') continue;
+    const g = groupOf(s);
+    groupTotals.set(g, (groupTotals.get(g) ?? 0) + (s.weight ?? 1));
+  }
+  // view extent = data bbox (padded) ∪ image bounds; atlas raw.extent is ignored
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const s of raw.spawns) {
     const x = Math.round(s.mapX * scale * 10) / 10;
     const y = Math.round(s.mapY * scale * 10) / 10;
+    minX = Math.min(minX, x - 40); maxX = Math.max(maxX, x + 40);
+    minY = Math.min(minY, y - 40); maxY = Math.max(maxY, y + 40);
     if (s.kind === 'alpha') {
       alphas.push({ palId: s.palId, name: s.palName, x, y, level: s.maxLevel, region });
       continue;
     }
     if (!byPal.has(s.palId)) byPal.set(s.palId, []);
-    // [x, y, nightOnly, minLv, maxLv]
-    byPal.get(s.palId).push([x, y, s.availability === 'night' ? 1 : 0, s.minLevel, s.maxLevel]);
+    const pct = Math.max(1, Math.round(((s.weight ?? 1) / (groupTotals.get(groupOf(s)) || 1)) * 100));
+    // [x, y, nightOnly, minLv, maxLv, groupSharePct]
+    byPal.get(s.palId).push([x, y, s.availability === 'night' ? 1 : 0, s.minLevel, s.maxLevel, pct]);
   }
-  const extent = raw.extent.map((v) => v * scale);
-  return { byPal, alphas, extent };
+  if (imageBounds) {
+    minX = Math.min(minX, imageBounds[0]); minY = Math.min(minY, imageBounds[1]);
+    maxX = Math.max(maxX, imageBounds[2]); maxY = Math.max(maxY, imageBounds[3]);
+  }
+  return { byPal, alphas, extent: [minX, minY, maxX, maxY], imageBounds: imageBounds ?? null };
 }
 
 // ------------------------------------------------------------------ images
@@ -508,8 +547,9 @@ async function main() {
   fandom.cats.push(...wikigg.cats);
   fandom.pois.push(...wikigg.pois);
 
-  const pal = normalizeSpawns(atlas.spawnsPalpagos, 'palpagos');
-  const tree = normalizeSpawns(atlas.spawnsTree, 'tree');
+  const palImageCrs = await fetchImageCrs();
+  const pal = normalizeSpawns(atlas.spawnsPalpagos, 'palpagos', palImageCrs);
+  const tree = normalizeSpawns(atlas.spawnsTree, 'tree', null);
 
   const palIds = atlas.palsIdx.records.map((r) => r.id);
   const enNameById = Object.fromEntries(atlas.palsIdx.records.map((r) => [r.id, r.name]));
@@ -549,8 +589,8 @@ async function main() {
   await writeJSON('map/pois.json', fandom);
   await writeJSON('map/alphas.json', [...pal.alphas, ...tree.alphas].map((a) => ({ ...a, nameZh: nameZhFor(a.palId) })));
   await writeJSON('map/regions.json', [
-    { id: 'palpagos', name: 'Palpagos Islands', nameZh: '帕魯帕格斯群島', extent: pal.extent, image: existsSync(path.join(PUB, 'map', 'palpagos.webp')) ? '/map/palpagos.webp' : existsSync(path.join(PUB, 'map', 'palpagos.jpg')) ? '/map/palpagos.jpg' : null },
-    { id: 'tree', name: 'World Tree', nameZh: '世界樹', extent: tree.extent, image: existsSync(path.join(PUB, 'map', 'tree.webp')) ? '/map/tree.webp' : null },
+    { id: 'palpagos', name: 'Palpagos Islands', nameZh: '帕魯帕格斯群島', extent: pal.extent, imageBounds: pal.imageBounds, image: existsSync(path.join(PUB, 'map', 'palpagos.webp')) ? '/map/palpagos.webp' : existsSync(path.join(PUB, 'map', 'palpagos.jpg')) ? '/map/palpagos.jpg' : null },
+    { id: 'tree', name: 'World Tree', nameZh: '世界樹', extent: tree.extent, imageBounds: tree.imageBounds, image: existsSync(path.join(PUB, 'map', 'tree.webp')) ? '/map/tree.webp' : null },
   ]);
 
   // per-pal spawn files + index
