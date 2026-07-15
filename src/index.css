@@ -130,6 +130,13 @@ table.data td.num, table.data th.num { text-align: right; }
 .work-line img { width: 17px; height: 17px; }
 .work-line b { color: var(--ink-1); font-variant-numeric: tabular-nums; }
 
+th.work-col { padding: 5px 4px; }
+.work-th { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; line-height: 1.2; }
+.work-th img { width: 20px; height: 20px; }
+td.work-cell { text-align: center !important; padding: 6px 4px; }
+td.work-cell span[data-tip] { font-weight: 600; }
+.work-zero { color: var(--ink-3); opacity: 0.35; }
+
 .mount-tag { font-size: 12.5px; white-space: nowrap; }
 
 .col-picker { position: relative; }

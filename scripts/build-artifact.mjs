@@ -180,6 +180,8 @@ ${leafletCss}
 .pw .wl{display:flex;flex-direction:column;gap:2px;padding:2px 0}
 .pw .wl>div{display:flex;gap:5px;align-items:center;line-height:1.3}
 .pw .wl b{color:var(--ink1)}
+.pw td.wc{text-align:center;padding:6px 5px}
+.pw .wz{color:var(--ink3);opacity:.35}
 .pw .bar{display:inline-flex;align-items:center;gap:6px}
 .pw .track{display:block;width:52px;height:6px;border-radius:3px;background:var(--s3);overflow:hidden;flex:none}
 .pw .fill{display:block;height:100%;background:var(--accent);border-radius:3px}
@@ -316,7 +318,10 @@ document.querySelectorAll('.pw .tab').forEach(b => b.addEventListener('click', (
 
 // ---------- 圖鑑 ----------
 const dexState = { q: '', el: null, sort: 'dex', dir: 1 };
-const COLS = [['dex','#',1],['name','帕魯',0],['el','屬性',0],['hp','HP',1],['atk','攻擊',1],['def','防禦',1],['spd','速度',1],['sta','耐力',1],['food','食量',1],['rar','稀有',1],['rank','配種Rank',1],['work','工作適性',0],['mt','騎乘',0],['mts','騎乘速度',1],['other','其他',0]];
+const WORK_KEYS = Object.keys(WORK_ZH);
+const COLS = [['dex','#',1],['name','帕魯',0],['el','屬性',0],['hp','HP',1],['atk','攻擊',1],['def','防禦',1],['spd','速度',1],['sta','耐力',1],['food','食量',1],['rar','稀有',1],['rank','配種Rank',1]]
+  .concat(WORK_KEYS.map(w => ['w:' + w, WORK_ZH[w], 1]))
+  .concat([['mt','騎乘',0],['mts','騎乘速度',1],['other','其他',0]]);
 const maxes = { hp: 0, atk: 0, def: 0 };
 D.pals.forEach(p => { maxes.hp = Math.max(maxes.hp, p.hp); maxes.atk = Math.max(maxes.atk, p.atk); maxes.def = Math.max(maxes.def, p.def); });
 function bar(v, m) { return '<span class="bar"><span class="track"><span class="fill" style="width:' + Math.round(v / m * 100) + '%"></span></span>' + v + '</span>'; }
@@ -343,9 +348,10 @@ function renderDexTable() {
   rows.sort((a, b) => {
     let c = 0;
     if (k === 'name') c = disp(a).localeCompare(disp(b), 'zh-Hant');
+    else if (k.startsWith('w:')) c = ((a.work || {})[k.slice(2)] || 0) - ((b.work || {})[k.slice(2)] || 0);
     else if (k === 'mt') c = (a.mt ? 1 : 9) - (b.mt ? 1 : 9);
     else if (k === 'mts') c = (a.mt && a.mt.speed || -1) - (b.mt && b.mt.speed || -1);
-    else if (k === 'el' || k === 'work' || k === 'other') c = 0;
+    else if (k === 'el' || k === 'other') c = 0;
     else c = a[k] - b[k];
     return c * dir || a.dex - b.dex;
   });
@@ -360,7 +366,7 @@ function renderDexTable() {
     '<td class="num">' + bar(p.atk, maxes.atk) + '</td>' +
     '<td class="num">' + bar(p.def, maxes.def) + '</td>' +
     '<td class="num">' + p.spd + '</td><td class="num">' + p.sta + '</td><td class="num">' + p.food + '</td><td class="num">' + p.rar + '</td><td class="num">' + p.rank + '</td>' +
-    '<td><div class="wl">' + Object.entries(p.work || {}).map(([w, l]) => '<div title="' + WORK_ZH[w] + ' Lv' + l + '"><span class="note">' + WORK_ZH[w] + '</span> <b>' + l + '</b></div>').join('') + '</div></td>' +
+    WORK_KEYS.map(w => { const l = (p.work || {})[w] || 0; return '<td class="num wc">' + (l ? '<b title="' + WORK_ZH[w] + ' Lv' + l + '">' + l + '</b>' : '<span class="wz">·</span>'); }).join('') +
     '<td>' + (p.mt ? '<span title="騎乘速度 ' + (p.mt.speed ?? '?') + ' · 加速 ' + (p.mt.sprint ?? '?') + ' · 鞍具科技Lv' + (p.mt.tech ?? '?') + '">' + MOUNT_EMO[p.mt.type] + ' ' + MOUNT_ZH[p.mt.type] + '</span>' : '') + '</td>' +
     '<td class="num">' + (p.mt && p.mt.speed != null ? p.mt.speed : '') + '</td>' +
     '<td>' + (p.noc ? '<span title="夜行性:夜晚活動,日間瞓覺">🌙 </span>' : '') + (p.alpha && p.alpha.length ? '<span title="野外 Alpha 頭目 Lv' + p.alpha.join('/') + '">👑Lv' + Math.min.apply(null, p.alpha) + '</span>' : '') + (p.ig ? ' <span title="限同種配種">🧬</span>' : '') + '</td>' +

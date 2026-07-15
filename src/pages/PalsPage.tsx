@@ -8,10 +8,10 @@ import { PalNameCell, StatBar } from '../components/shared';
 
 type ColId =
   | 'dex' | 'name' | 'elements' | 'hp' | 'attack' | 'defense' | 'runSpeed' | 'stamina'
-  | 'food' | 'rarity' | 'breedingRank' | 'spawns' | 'work'
+  | 'food' | 'rarity' | 'breedingRank' | 'spawns' | `work:${WorkName}`
   | 'mountType' | 'mountSpeed' | 'mountSprint' | 'mountTech' | 'other';
 
-interface Col { id: ColId; label: string; num?: boolean; sortable?: boolean; defaultOn?: boolean }
+interface Col { id: ColId; label: string; num?: boolean; sortable?: boolean; defaultOn?: boolean; work?: WorkName }
 
 const COLS: Col[] = [
   { id: 'dex', label: '#', num: true, sortable: true, defaultOn: true },
@@ -20,13 +20,14 @@ const COLS: Col[] = [
   { id: 'hp', label: 'HP', num: true, sortable: true, defaultOn: true },
   { id: 'attack', label: '攻擊', num: true, sortable: true, defaultOn: true },
   { id: 'defense', label: '防禦', num: true, sortable: true, defaultOn: true },
-  { id: 'runSpeed', label: '跑速', num: true, sortable: true, defaultOn: true },
+  { id: 'runSpeed', label: '跑速', num: true, sortable: true, defaultOn: false },
   { id: 'stamina', label: '耐力', num: true, sortable: true, defaultOn: false },
   { id: 'food', label: '食量', num: true, sortable: true, defaultOn: true },
   { id: 'rarity', label: '稀有度', num: true, sortable: true, defaultOn: false },
   { id: 'breedingRank', label: '配種Rank', num: true, sortable: true, defaultOn: false },
   { id: 'spawns', label: '出現點', num: true, sortable: true, defaultOn: false },
-  { id: 'work', label: '工作適性', defaultOn: true },
+  // one column per work type — sortable, so you can rank pals by e.g. 手工作業
+  ...WORK_ORDER.map((w): Col => ({ id: `work:${w}`, label: WORK_ZH[w], num: true, sortable: true, defaultOn: true, work: w })),
   { id: 'mountType', label: '騎乘', sortable: true, defaultOn: true },
   { id: 'mountSpeed', label: '騎乘速度', num: true, sortable: true, defaultOn: true },
   { id: 'mountSprint', label: '加速速度', num: true, sortable: true, defaultOn: false },
@@ -34,7 +35,7 @@ const COLS: Col[] = [
   { id: 'other', label: '其他', defaultOn: true },
 ];
 
-const COLS_STORE_KEY = 'pal-cols-v1';
+const COLS_STORE_KEY = 'pal-cols-v2';
 
 function loadColPrefs(): Set<ColId> {
   try {
@@ -93,6 +94,7 @@ export default function PalsPage() {
     });
     const { key, dir } = sort;
     const val = (p: Pal): number | string => {
+      if (key.startsWith('work:')) return p.workSuitability[key.slice(5) as WorkName] ?? 0;
       switch (key) {
         case 'dex': return p.paldexNumber;
         case 'name': return p.nameZh ?? p.name;
@@ -121,6 +123,7 @@ export default function PalsPage() {
       ? { key: c.id, dir: cur.dir === 1 ? -1 : 1 }
       : { key: c.id, dir: c.id === 'dex' || c.id === 'name' || c.id === 'mountTech' || c.id === 'mountType' ? 1 : -1 }));
   };
+  const workLevel = (p: Pal, w: WorkName) => p.workSuitability[w] ?? 0;
   const toggleSet = <T,>(set: Set<T>, v: T): Set<T> => {
     const next = new Set(set);
     if (next.has(v)) next.delete(v); else next.add(v);
@@ -130,6 +133,16 @@ export default function PalsPage() {
   const shown = COLS.filter((c) => visCols.has(c.id));
 
   const cellFor = (c: Col, p: Pal) => {
+    if (c.work) {
+      const lv = workLevel(p, c.work);
+      return (
+        <td key={c.id} className="num work-cell">
+          {lv > 0
+            ? <span data-tip={`${WORK_ZH[c.work]} Lv${lv}|${WORK_DESC[c.work]}`}>{lv}</span>
+            : <span className="work-zero">·</span>}
+        </td>
+      );
+    }
     switch (c.id) {
       case 'dex': return <td key={c.id} className="num">{p.paldexNumber}</td>;
       case 'name': return <td key={c.id}><PalNameCell pal={p} /></td>;
@@ -151,19 +164,6 @@ export default function PalsPage() {
       case 'rarity': return <td key={c.id} className="num">{p.rarity}</td>;
       case 'breedingRank': return <td key={c.id} className="num">{p.breedingRank}</td>;
       case 'spawns': return <td key={c.id} className="num">{p.spawnCount.palpagos + p.spawnCount.tree}</td>;
-      case 'work': return (
-        <td key={c.id}>
-          <div className="work-stack">
-            {WORK_ORDER.filter((w) => p.workSuitability[w]).map((w) => (
-              <div key={w} className="work-line" data-tip={`${WORK_ZH[w]} Lv${p.workSuitability[w]}|${WORK_DESC[w]}`}>
-                <img src={workIconUrl(w)} alt="" />
-                <span>{WORK_ZH[w]}</span>
-                <b>{p.workSuitability[w]}</b>
-              </div>
-            ))}
-          </div>
-        </td>
-      );
       case 'mountType': return (
         <td key={c.id}>
           {p.mount && (
@@ -252,11 +252,18 @@ export default function PalsPage() {
               {shown.map((c) => (
                 <th
                   key={c.id}
-                  className={`${c.num ? 'num' : ''} ${sort.key === c.id ? 'sorted' : ''}`}
+                  className={`${c.num ? 'num' : ''} ${sort.key === c.id ? 'sorted' : ''} ${c.work ? 'work-col' : ''}`}
                   style={c.sortable ? undefined : { cursor: 'default' }}
                   onClick={() => toggleSort(c)}
                 >
-                  {c.label}{sort.key === c.id ? (sort.dir === 1 ? ' ↑' : ' ↓') : ''}
+                  {c.work ? (
+                    <span className="work-th" data-tip={`${WORK_ZH[c.work]}|${WORK_DESC[c.work]}|點擊可排序`}>
+                      <img src={workIconUrl(c.work)} alt="" />
+                      <span>{c.label}{sort.key === c.id ? (sort.dir === 1 ? '↑' : '↓') : ''}</span>
+                    </span>
+                  ) : (
+                    <>{c.label}{sort.key === c.id ? (sort.dir === 1 ? ' ↑' : ' ↓') : ''}</>
+                  )}
                 </th>
               ))}
             </tr>
