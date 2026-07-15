@@ -32,6 +32,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Install ImageMagick (map underlay resize)
+        run: sudo apt-get update -q && sudo apt-get install -y -q imagemagick webp
+
       # keep downloaded icons / full-res map between runs (polite to upstreams)
       - uses: actions/cache@v4
         with:

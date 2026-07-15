@@ -177,7 +177,7 @@ export default function MapPage() {
   // ---- POI + alpha layer ----
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!ready || !map) return;
     layersRef.current.pois?.remove();
     const group = L.layerGroup();
     for (const cat of cats) {
@@ -198,7 +198,7 @@ export default function MapPage() {
       }
     }
     layersRef.current.pois = group.addTo(map);
-  }, [cats, poisByCat, catOn, pinOff, byId]);
+  }, [cats, poisByCat, catOn, pinOff, byId, ready]);
 
   // ---- spawn data fetch ----
   useEffect(() => {
@@ -215,7 +215,7 @@ export default function MapPage() {
   // ---- spawn layer ----
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!ready || !map) return;
     layersRef.current.spawns?.remove();
     const group = L.layerGroup();
     for (const sel of spawnSel) {
@@ -261,7 +261,7 @@ export default function MapPage() {
       }
     }
     layersRef.current.spawns = group.addTo(map);
-  }, [spawnSel, spawnData, spawnMode, dayNight, region, byId]);
+  }, [spawnSel, spawnData, spawnMode, dayNight, region, byId, ready]);
 
   if (!pals || !poiData || !alphas || !regions || !spawnIndex) {
     return <div className="page">載入地圖數據中…</div>;

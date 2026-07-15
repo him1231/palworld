@@ -484,7 +484,10 @@ async function fetchMapImage() {
   for (const [cmd, args] of attempts) {
     try { execFileSync(cmd, args, { stdio: 'pipe' }); done = true; break; } catch { /* next */ }
   }
-  if (!done) console.warn('  ! no image resizer available (sips/magick/convert); using original size');
+  if (!done) {
+    console.warn('  ! no image resizer available (sips/magick/convert); shipping full-size image');
+    await writeFile(out, await readFile(full));
+  }
   console.log('  map underlay ready');
 }
 
