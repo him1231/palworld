@@ -120,11 +120,22 @@ const palsLite = pals.map((p) => ({
   alpha: p.alphaLevels, sc: p.spawnCount, mt: p.mount,
 }));
 
+// artifact keeps only lighter categories (≤400 markers) to stay single-file friendly
+const AGROUP_COLOR = { 地點: '#22d3ee', 可收集: '#4ade80', 收集: '#4ade80', 敵人: '#e66767', 資源: '#facc15', 礦脈: '#c98500', 釣魚: '#3987e5', NPCs: '#e879f9', 帕魯蛋: '#f9a8d4', Oilrig: '#67e8f9', 其他: '#94a3b8' };
+const poisCatCount = new Map();
+for (const p of pois.pois) poisCatCount.set(p.cat, (poisCatCount.get(p.cat) ?? 0) + 1);
+const catsLite = pois.cats
+  .filter((c) => (poisCatCount.get(c.id) ?? 0) <= 400)
+  .map((c) => ({ id: c.id, nameZh: c.nameZh, group: c.group, color: c.color ?? AGROUP_COLOR[c.group] ?? '#94a3b8', glyph: c.glyph ?? (c.nameZh || '?')[0] }));
+const keepCats = new Set(catsLite.map((c) => c.id));
+const poisLite = { cats: catsLite, pois: pois.pois.filter((p) => keepCats.has(p.cat)) };
+console.log('artifact pois:', poisLite.pois.length, 'markers in', catsLite.length, 'categories');
+
 const payload = {
   meta: { build: meta.steamBuildId, generated: meta.gameDataGeneratedAt, fetched: meta.fetchedAt, attribution: meta.attribution },
   pals: palsLite,
   breeding,
-  pois,
+  pois: poisLite,
   alphas,
   regions,
   clusters,

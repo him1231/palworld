@@ -65,10 +65,15 @@ export interface Item {
 
 export interface PoiCategory {
   id: string;
-  name: string;
+  name?: string;
   nameZh: string;
-  color: string;
-  glyph: string;
+  /** zh group label (地點/收集/敵人/資源/釣魚/…) */
+  group?: string;
+  /** vendored icon path (paldb source) — falls back to color+glyph pin */
+  icon?: string | null;
+  color?: string;
+  glyph?: string;
+  count?: number;
 }
 
 export interface Poi {
@@ -80,7 +85,7 @@ export interface Poi {
   link: string | null;
 }
 
-export interface PoiData { cats: PoiCategory[]; pois: Poi[] }
+export interface PoiData { groups?: string[]; cats: PoiCategory[]; pois: Poi[] }
 
 export interface AlphaSpawn {
   palId: string;

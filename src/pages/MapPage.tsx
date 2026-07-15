@@ -12,14 +12,17 @@ import { PalIcon } from '../components/shared';
 /** dark-mode categorical slots (dataviz reference palette) for selected pals */
 const PAL_COLORS = ['#3987e5', '#199e70', '#c98500', '#008300', '#9085e9', '#e66767', '#d55181', '#d95926'];
 
-const ALPHA_CAT: PoiCategory = { id: 'alpha', name: 'Alpha Boss', nameZh: 'Alpha 頭目', color: '#e66767', glyph: '王' };
+const ALPHA_CAT: PoiCategory = { id: 'alpha', name: 'Alpha Boss', nameZh: 'Alpha 頭目', group: '敵人', color: '#e66767', glyph: '王' };
 
-/** sidebar sections (op.gg-style grouping) */
-const CAT_GROUPS: { id: string; name: string; catIds: string[] }[] = [
-  { id: 'explore', name: '地點', catIds: ['fast_travel', 'tower', 'dungeon', 'sealed_realm'] },
-  { id: 'collect', name: '收集品', catIds: ['effigy', 'statue_power', 'journal', 'chest', 'egg', 'skill_fruit'] },
-  { id: 'enemy', name: '敵人', catIds: ['alpha', 'bounty', 'predator', 'poacher_camp'] },
-];
+const GROUP_COLOR: Record<string, string> = {
+  地點: '#22d3ee', 收集: '#4ade80', 可收集: '#4ade80', 敵人: '#e66767',
+  資源: '#facc15', 礦脈: '#c98500', 釣魚: '#3987e5', NPC: '#e879f9', NPCs: '#e879f9',
+  蛋: '#f9a8d4', 帕魯蛋: '#f9a8d4', Oilrig: '#67e8f9', 其他: '#94a3b8',
+};
+const catColor = (c: PoiCategory) => c.color ?? GROUP_COLOR[c.group ?? '其他'] ?? '#94a3b8';
+const catGlyph = (c: PoiCategory) => c.glyph ?? (c.nameZh ? c.nameZh[0] : '?');
+/** categories this big render as canvas dots instead of DOM pins */
+const BIG_CAT = 400;
 
 interface SpawnSel { palId: string; color: string }
 
@@ -29,7 +32,17 @@ function esc(s: string) {
   return d.innerHTML;
 }
 
-function pinIcon(color: string, glyph: string) {
+function pinIcon(cat: PoiCategory) {
+  if (cat.icon) {
+    return L.divIcon({
+      className: '',
+      html: `<img src="${asset(cat.icon)}" style="width:26px;height:26px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.9))" alt=""/>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -12],
+    });
+  }
+  const color = catColor(cat), glyph = catGlyph(cat);
   return L.divIcon({
     className: '',
     html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #0b0d12;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.6)"><span style="transform:rotate(45deg);font-size:10px;font-weight:700;color:#0b0d12;line-height:1">${glyph}</span></div>`,
@@ -86,7 +99,7 @@ export default function MapPage() {
   const spawnIndex = useData(loadSpawnIndex);
 
   const [region, setRegion] = useState<RegionId>('palpagos');
-  const [catOn, setCatOn] = useState<Record<string, boolean>>({ fast_travel: true, tower: true, alpha: true });
+  const [catOn, setCatOn] = useState<Record<string, boolean>>({ fast_travel: true, 'fast-travel': true, tower: true, alpha: true });
   const [pinOff, setPinOff] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pinFilter, setPinFilter] = useState('');
@@ -214,19 +227,22 @@ export default function MapPage() {
     const group = L.layerGroup();
     for (const cat of cats) {
       if (!catOn[cat.id]) continue;
-      for (const poi of poisByCat.get(cat.id) ?? []) {
+      const pois = poisByCat.get(cat.id) ?? [];
+      const asDots = pois.length > BIG_CAT;
+      for (const poi of pois) {
         if (pinOff.has(poi.id)) continue;
-        const mk = L.marker([poi.y, poi.x], { icon: pinIcon(cat.color, cat.glyph) });
         const palId = (poi as Poi & { palId?: string }).palId;
         const pal = palId ? byId.get(palId) : null;
         const iconHtml = pal && palIconUrl(pal) ? `<img src="${palIconUrl(pal)}" style="width:34px;height:34px;border-radius:50%;float:left;margin-right:8px" alt=""/>` : '';
-        mk.bindPopup(
+        const popup =
           `<div>${iconHtml}<div class="popup-title">${esc(poi.name)}</div>` +
           `<div class="popup-sub">${esc(cat.nameZh)} · (${Math.round(poi.x)}, ${Math.round(poi.y)})</div>` +
           (pal ? `<a href="${asset(`/pal/${pal.id}`)}">睇 ${esc(palDisplayName(pal))} 詳細 →</a>` : '') +
-          `</div>`,
-        );
-        mk.addTo(group);
+          `</div>`;
+        const mk = asDots
+          ? L.circleMarker([poi.y, poi.x], { radius: 5, color: '#0b0d12', weight: 1.5, fillColor: catColor(cat), fillOpacity: 0.95 })
+          : L.marker([poi.y, poi.x], { icon: pinIcon(cat) });
+        mk.bindPopup(popup).addTo(group);
       }
     }
     layersRef.current.pois = group.addTo(map);
@@ -353,80 +369,88 @@ export default function MapPage() {
           type="search" placeholder="篩選標記名稱…" value={pinFilter}
           onChange={(e) => setPinFilter(e.target.value)}
         />
-        {CAT_GROUPS.map((g) => {
-          const groupCats = cats.filter((c) => g.catIds.includes(c.id) && (poisByCat.get(c.id)?.length ?? 0) > 0);
-          if (!groupCats.length) return null;
-          const groupOpen = !closedGroups.has(g.id);
-          const total = groupCats.reduce((n, c) => n + (poisByCat.get(c.id)?.length ?? 0), 0);
-          const setGroup = (on: boolean) => setCatOn((cur) => {
-            const next = { ...cur };
-            for (const c of groupCats) next[c.id] = on;
-            return next;
-          });
-          return (
-            <div key={g.id} className="cat-group">
-              <div className="group-head">
-                <button
-                  className="group-toggle"
-                  onClick={() => setClosedGroups((cur) => {
-                    const next = new Set(cur);
-                    if (next.has(g.id)) next.delete(g.id); else next.add(g.id);
-                    return next;
-                  })}
-                >
-                  {groupOpen ? '▾' : '▸'} {g.name}
-                  <span className="count-badge">{total}</span>
-                </button>
-                <button className="locate" onClick={() => setGroup(true)}>全開</button>
-                <button className="locate" onClick={() => setGroup(false)}>全關</button>
-              </div>
-              {groupOpen && groupCats.map((cat) => {
-                const pois = (poisByCat.get(cat.id) ?? []).filter(
-                  (p) => !pinFilter || p.name.toLowerCase().includes(pinFilter.toLowerCase()),
-                );
-                if (!pois.length && pinFilter) return null;
-                const isOpen = expanded === cat.id;
-                const offCount = pois.filter((p) => pinOff.has(p.id)).length;
-                return (
-                  <div className="cat-row" key={cat.id}>
-                    <div className="cat-head">
-                      <label>
-                        <input type="checkbox" checked={!!catOn[cat.id]} onChange={() => toggleCat(cat.id)} />
-                        <span className="cat-glyph" style={{ background: cat.color }}>{cat.glyph}</span>
-                        <span>{cat.nameZh}</span>
-                        <span className="count-badge">{pois.length - offCount}/{pois.length}</span>
-                      </label>
-                      <button className="cat-expand" onClick={() => setExpanded(isOpen ? null : cat.id)}>
-                        {isOpen ? '▲' : '▼'}
-                      </button>
-                    </div>
-                    {isOpen && (
-                      <div className="pin-list">
-                        <div className="pin-row" style={{ borderBottom: '1px solid var(--hairline)' }}>
-                          <button className="locate" onClick={() => setAllPins(cat.id, true)}>全開</button>
-                          <button className="locate" onClick={() => setAllPins(cat.id, false)}>全關</button>
-                        </div>
-                        {pois.map((p) => (
-                          <div className="pin-row" key={p.id}>
-                            <label>
-                              <input
-                                type="checkbox"
-                                checked={!pinOff.has(p.id)}
-                                onChange={() => togglePin(p.id)}
-                              />
-                              <span className="pin-name">{p.name}</span>
-                            </label>
-                            <button className="locate" title="喺地圖顯示" onClick={() => locate(p)}>◎</button>
-                          </div>
-                        ))}
+        {(() => {
+          const order = poiData.groups ?? [];
+          const present = [...new Set(cats.map((c) => c.group ?? '其他'))];
+          const groups = [...order.filter((g) => present.includes(g)), ...present.filter((g) => !order.includes(g))];
+          return groups.map((g) => {
+            const groupCats = cats.filter((c) => (c.group ?? '其他') === g && (poisByCat.get(c.id)?.length ?? 0) > 0);
+            if (!groupCats.length) return null;
+            const groupOpen = !closedGroups.has(g);
+            const total = groupCats.reduce((n, c) => n + (poisByCat.get(c.id)?.length ?? 0), 0);
+            const setGroup = (on: boolean) => setCatOn((cur) => {
+              const next = { ...cur };
+              for (const c of groupCats) next[c.id] = on;
+              return next;
+            });
+            return (
+              <div key={g} className="cat-group">
+                <div className="group-head">
+                  <button
+                    className="group-toggle"
+                    onClick={() => setClosedGroups((cur) => {
+                      const next = new Set(cur);
+                      if (next.has(g)) next.delete(g); else next.add(g);
+                      return next;
+                    })}
+                  >
+                    {groupOpen ? '▾' : '▸'} {g}
+                    <span className="count-badge">{total}</span>
+                  </button>
+                  <button className="locate" onClick={() => setGroup(true)}>全開</button>
+                  <button className="locate" onClick={() => setGroup(false)}>全關</button>
+                </div>
+                {groupOpen && groupCats.map((cat) => {
+                  const pois = (poisByCat.get(cat.id) ?? []).filter(
+                    (p) => !pinFilter || p.name.toLowerCase().includes(pinFilter.toLowerCase()),
+                  );
+                  if (!pois.length && pinFilter) return null;
+                  const isOpen = expanded === cat.id;
+                  const offCount = pois.filter((p) => pinOff.has(p.id)).length;
+                  return (
+                    <div className="cat-row" key={cat.id}>
+                      <div className="cat-head">
+                        <label>
+                          <input type="checkbox" checked={!!catOn[cat.id]} onChange={() => toggleCat(cat.id)} />
+                          {cat.icon
+                            ? <img className="cat-icon" src={asset(cat.icon)} alt="" />
+                            : <span className="cat-glyph" style={{ background: catColor(cat) }}>{catGlyph(cat)}</span>}
+                          <span>{cat.nameZh}</span>
+                          <span className="count-badge">{pois.length - offCount}/{pois.length}</span>
+                        </label>
+                        <button className="cat-expand" onClick={() => setExpanded(isOpen ? null : cat.id)}>
+                          {isOpen ? '▲' : '▼'}
+                        </button>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
+                      {isOpen && (
+                        <div className="pin-list">
+                          <div className="pin-row" style={{ borderBottom: '1px solid var(--hairline)' }}>
+                            <button className="locate" onClick={() => setAllPins(cat.id, true)}>全開</button>
+                            <button className="locate" onClick={() => setAllPins(cat.id, false)}>全關</button>
+                          </div>
+                          {pois.slice(0, 400).map((p) => (
+                            <div className="pin-row" key={p.id}>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={!pinOff.has(p.id)}
+                                  onChange={() => togglePin(p.id)}
+                                />
+                                <span className="pin-name">{p.name}</span>
+                              </label>
+                              <button className="locate" title="喺地圖顯示" onClick={() => locate(p)}>◎</button>
+                            </div>
+                          ))}
+                          {pois.length > 400 && <div className="pin-row"><span className="pin-name" style={{ color: 'var(--ink-3)' }}>…只列首 400 個,用上面篩選收窄</span></div>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          });
+        })()}
 
         <h3>帕魯出現範圍</h3>
         <div className="spawn-controls">

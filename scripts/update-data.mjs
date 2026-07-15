@@ -303,6 +303,111 @@ async function fetchWikiggPois() {
   }
 }
 
+// ------------------------------------------------- paldb 1.0 map database
+/**
+ * paldb.cc's interactive map ships its full 1.0 marker DB as a JS file with
+ * zh-TW labels (13k+ markers, 80+ categories incl. ores/eggs/fishing/chests).
+ * Coordinates verified identical to the atlas in-game system (no transform).
+ */
+function extractJsVar(src, name) {
+  const m = new RegExp(`(?:var|const|let)\\s+${name}\\s*=\\s*`).exec(src);
+  if (!m) return null;
+  let i = m.index + m[0].length;
+  const open = src[i], close = open === '[' ? ']' : '}';
+  if (open !== '[' && open !== '{') return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let j = i; j < src.length; j++) {
+    const c = src[j];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else {
+      if (c === '"') inStr = true;
+      else if (c === open) depth++;
+      else if (c === close && --depth === 0) return JSON.parse(src.slice(i, j + 1));
+    }
+  }
+  return null;
+}
+
+const POI_GROUP_ORDER = ['地點', '可收集', '敵人', '資源', '礦脈', '釣魚', '帕魯蛋', 'NPCs', 'Oilrig', '收集', '蛋', 'NPC', '其他'];
+const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+async function fetchPaldbMap() {
+  console.log('[3.2] paldb 1.0 map database…');
+  try {
+    const src = await getText('https://paldb.cc/js/map_data_tw.js');
+    const iconLookup = extractJsVar(src, 'iconLookup') ?? {};
+    const fixed = extractJsVar(src, 'fixedDungeon') ?? [];
+    const extras = extractJsVar(src, 'extras') ?? [];
+    const regions = (extractJsVar(src, 'regionData') ?? []).map((r) => ({ ...r, type: 'Region' }));
+    const all = [...fixed, ...extras, ...regions];
+
+    // sanity gate: known anchors must sit where the atlas says they do
+    const anubis = all.find((x) => x.type === 'Alpha Pal' && /Anubis/.test(x.id ?? ''));
+    if (all.length < 5000 || !anubis || Math.abs(anubis.ipos.X + 134) > 5 || Math.abs(anubis.ipos.Y + 94) > 5) {
+      throw new Error('sanity check failed (coordinate system may have changed)');
+    }
+
+    const cats = [];
+    const catIndex = new Map();
+    const counts = new Map();
+    for (const x of all) counts.set(x.type, (counts.get(x.type) ?? 0) + 1);
+    for (const [type, n] of counts) {
+      if (type === 'Alpha Pal') continue; // atlas alpha layer covers this (incl. World Tree)
+      const meta = iconLookup[type] ?? {};
+      const id = slugify(type);
+      catIndex.set(type, id);
+      cats.push({
+        id,
+        name: type,
+        nameZh: meta.label ?? (type === 'Region' ? '地區名稱' : type),
+        group: meta.category ?? (type === 'Region' ? '地點' : '其他'),
+        icon: meta.fixed_icon ?? null,
+        count: n,
+      });
+    }
+    // stable ordering: by group order then count desc
+    cats.sort((a, b) => (POI_GROUP_ORDER.indexOf(a.group) - POI_GROUP_ORDER.indexOf(b.group)) || b.count - a.count);
+
+    const pois = [];
+    const seq = new Map();
+    for (const x of all) {
+      const cat = catIndex.get(x.type);
+      if (!cat) continue;
+      const k = (seq.get(cat) ?? 0) + 1;
+      seq.set(cat, k);
+      pois.push({
+        id: `${cat}-${x.id ?? k}-${k}`,
+        cat,
+        x: Math.round(x.ipos.X * 10) / 10,
+        y: Math.round(x.ipos.Y * 10) / 10,
+        name: (x.lv ? `Lv${x.lv} ` : '') + (x.item ?? iconLookup[x.type]?.label ?? x.type),
+        link: x.href ?? null,
+      });
+    }
+    console.log(`  ${pois.length} markers in ${cats.length} categories (1.0)`);
+
+    // vendor category icons
+    if (!SKIP_IMAGES) {
+      const dir = path.join(PUB, 'img', 'poi');
+      await mkdir(dir, { recursive: true });
+      await pool(cats.filter((c) => c.icon), 8, async (c) => {
+        const dest = path.join(dir, `${c.id}.webp`);
+        const r = await downloadImage(c.icon, dest, { Referer: 'https://paldb.cc/' });
+        c.icon = r ? `/img/poi/${c.id}.webp` : null;
+      });
+    } else {
+      for (const c of cats) c.icon = existsSync(path.join(PUB, 'img', 'poi', `${c.id}.webp`)) ? `/img/poi/${c.id}.webp` : null;
+    }
+    return { groups: POI_GROUP_ORDER, cats, pois };
+  } catch (e) {
+    console.warn(`  ! paldb map failed (${e.message}) — falling back to Fandom/wiki.gg`);
+    return null;
+  }
+}
+
 // ------------------------------------------------------------ fandom POIs
 async function fetchFandomPois() {
   console.log('[3/6] Fandom static POIs…');
@@ -538,18 +643,30 @@ async function fetchMapImage() {
 async function main() {
   await mkdir(DATA, { recursive: true });
   const atlas = await fetchAtlas();
-  const [zhNames, fandom, { enrich, passives }, mounts, wikigg] = await Promise.all([
-    fetchZhNames(), fetchFandomPois(), fetchEnrichment(), fetchMounts(), fetchWikiggPois(),
+  const [zhNames, { enrich, passives }, mounts, paldbMap] = await Promise.all([
+    fetchZhNames(), fetchEnrichment(), fetchMounts(), fetchPaldbMap(),
   ]);
-  // localize predator names ("Predator <EN name>" → "狂暴 <zh>")
-  const zhByEn = Object.fromEntries(atlas.palsIdx.records.map((r) => [r.name, zhNames[r.id]]));
-  for (const poi of wikigg.pois) {
-    if (poi.cat !== 'predator') continue;
-    const en = poi.name.replace(/^Predator /, '').replace(/（.*$/, '');
-    if (zhByEn[en]) poi.name = poi.name.replace(`Predator ${en}`, `狂暴 ${zhByEn[en]}`);
+  let poiOut = paldbMap;
+  if (!poiOut) {
+    // legacy fallback: Fandom static POIs + wiki.gg bounty/predator fragments
+    const [fandom, wikigg] = await Promise.all([fetchFandomPois(), fetchWikiggPois()]);
+    const zhByEn = Object.fromEntries(atlas.palsIdx.records.map((r) => [r.name, zhNames[r.id]]));
+    for (const poi of wikigg.pois) {
+      if (poi.cat !== 'predator') continue;
+      const en = poi.name.replace(/^Predator /, '').replace(/（.*$/, '');
+      if (zhByEn[en]) poi.name = poi.name.replace(`Predator ${en}`, `狂暴 ${zhByEn[en]}`);
+    }
+    fandom.cats.push(...wikigg.cats);
+    fandom.pois.push(...wikigg.pois);
+    const LEGACY_GROUP = {
+      fast_travel: '地點', tower: '敵人', dungeon: '地點', sealed_realm: '地點',
+      effigy: '收集', statue_power: '收集', journal: '收集', chest: '收集', egg: '蛋',
+      skill_fruit: '資源', poacher_camp: '敵人', bounty: '敵人', predator: '敵人',
+    };
+    for (const c of fandom.cats) c.group = LEGACY_GROUP[c.id] ?? '其他';
+    poiOut = { groups: POI_GROUP_ORDER, cats: fandom.cats, pois: fandom.pois };
   }
-  fandom.cats.push(...wikigg.cats);
-  fandom.pois.push(...wikigg.pois);
+  const fandom = poiOut;
 
   const palImageCrs = await fetchImageCrs();
   const pal = normalizeSpawns(atlas.spawnsPalpagos, 'palpagos', palImageCrs);
@@ -621,7 +738,7 @@ async function main() {
       { name: 'Palworld Wiki (Fandom)', url: 'https://palworld.fandom.com/wiki/Map:Palpagos_Islands', for: 'Static map POIs (CC BY-SA 3.0)' },
       { name: 'palworld.wiki.gg', url: 'https://palworld.wiki.gg/', for: 'World map image' },
       { name: 'pyPalworldAPI', url: 'https://github.com/stolenvw/pyPalworldAPI', for: 'Pal / element / work icons' },
-      { name: 'paldb.cc', url: 'https://paldb.cc/tw/', for: 'Traditional Chinese pal names' },
+      { name: 'paldb.cc', url: 'https://paldb.cc/tw/', for: 'Traditional Chinese pal names, mount stats, 1.0 map marker database' },
     ],
     disclaimer: 'Unofficial fan project. Not affiliated with Pocketpair, Inc. Game content © Pocketpair, Inc.',
   });
