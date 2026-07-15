@@ -13,6 +13,7 @@ import ItemsPage from './pages/ItemsPage';
 import AboutPage from './pages/AboutPage';
 import BasesPage from './pages/BasesPage';
 import PassivesPage from './pages/PassivesPage';
+import PicksPage from './pages/PicksPage';
 
 const router = createBrowserRouter([
   {
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
       { path: 'elements', element: <ElementsPage /> },
       { path: 'items', element: <ItemsPage /> },
       { path: 'bases', element: <BasesPage /> },
+      { path: 'picks', element: <PicksPage /> },
       { path: 'passives', element: <PassivesPage /> },
       { path: 'about', element: <AboutPage /> },
     ],

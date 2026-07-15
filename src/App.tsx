@@ -26,6 +26,7 @@ export default function App() {
         <NavLink to="/passives" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>被動</NavLink>
         <NavLink to="/items" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>道具</NavLink>
         <NavLink to="/bases" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>基地</NavLink>
+        <NavLink to="/picks" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>推薦</NavLink>
         <NavLink to="/about" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>關於</NavLink>
         <div className="spacer" />
         {staleBuild && (
