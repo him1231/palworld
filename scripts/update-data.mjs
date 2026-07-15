@@ -342,7 +342,8 @@ async function fetchPaldbMap() {
     const fixed = extractJsVar(src, 'fixedDungeon') ?? [];
     const extras = extractJsVar(src, 'extras') ?? [];
     const regions = (extractJsVar(src, 'regionData') ?? []).map((r) => ({ ...r, type: 'Region' }));
-    const all = [...fixed, ...extras, ...regions];
+    const all = [...fixed, ...extras, ...regions]
+      .filter((x) => x && x.ipos && typeof x.ipos.X === 'number' && typeof x.ipos.Y === 'number' && x.type);
 
     // sanity gate: known anchors must sit where the atlas says they do
     const anubis = all.find((x) => x.type === 'Alpha Pal' && /Anubis/.test(x.id ?? ''));
