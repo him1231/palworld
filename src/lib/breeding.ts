@@ -58,6 +58,44 @@ export function breedChild(model: BreedingModel, aId: string, bId: string): Pal 
 
 export interface ParentPair { a: Pal; b: Pal }
 
+export interface BreedStep { parent: Pal; partner: Pal; child: Pal }
+
+/**
+ * Shortest breeding chain from `startId` to `targetId` (BFS over generations):
+ * each step breeds the current pal with any partner. Returns null if the
+ * target is unreachable (e.g. same-species-only pals).
+ */
+export function shortestPath(model: BreedingModel, startId: string, targetId: string, maxDepth = 6): BreedStep[] | null {
+  if (startId === targetId) return [];
+  const prev = new Map<string, { from: string; partner: string }>();
+  let frontier = [startId];
+  const seen = new Set(frontier);
+  for (let depth = 0; depth < maxDepth && frontier.length; depth++) {
+    const next: string[] = [];
+    for (const cur of frontier) {
+      for (const partner of model.pals) {
+        const child = breedChild(model, cur, partner.id);
+        if (!child || seen.has(child.id)) continue;
+        seen.add(child.id);
+        prev.set(child.id, { from: cur, partner: partner.id });
+        if (child.id === targetId) {
+          const steps: BreedStep[] = [];
+          let at = targetId;
+          while (at !== startId) {
+            const p = prev.get(at)!;
+            steps.unshift({ parent: model.byId.get(p.from)!, partner: model.byId.get(p.partner)!, child: model.byId.get(at)! });
+            at = p.from;
+          }
+          return steps;
+        }
+        next.push(child.id);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
 /** All unordered parent pairs producing the given child. Memoized. */
 const parentCache = new Map<string, ParentPair[]>();
 export function findParents(model: BreedingModel, childId: string): ParentPair[] {

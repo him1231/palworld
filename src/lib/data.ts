@@ -1,5 +1,5 @@
 import type {
-  AlphaSpawn, BreedingData, Item, Meta, Pal, PalEnrich, PoiData, Region, RegionId,
+  AlphaSpawn, BreedingData, Item, Meta, Pal, PalEnrich, PassiveSkill, PoiData, Region, RegionId,
   SpawnIndex, SpawnPoint,
 } from './types';
 
@@ -21,6 +21,7 @@ function load<T>(path: string): Promise<T> {
 
 export const loadPals = () => load<Pal[]>('/data/pals.json');
 export const loadEnrich = () => load<Record<string, PalEnrich>>('/data/enrich.json');
+export const loadPassives = () => load<PassiveSkill[]>('/data/passives.json');
 export const loadBreeding = () => load<BreedingData>('/data/breeding.json');
 export const loadItems = () => load<Item[]>('/data/items.json');
 export const loadPois = () => load<PoiData>('/data/map/pois.json');

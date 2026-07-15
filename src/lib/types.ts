@@ -110,6 +110,13 @@ export type SpawnPoint = [number, number, 0 | 1, number, number, number?];
 
 export type SpawnIndex = Record<RegionId, Record<string, number>>;
 
+export interface PassiveSkill {
+  name: string;
+  ability: string | null;
+  tier: number;
+  description: string | null;
+}
+
 export interface Meta {
   steamBuildId: string;
   gameDataGeneratedAt: string;

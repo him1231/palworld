@@ -227,10 +227,14 @@ async function fetchEnrichment() {
       };
     }
     console.log(`  enriched ${Object.keys(enrich).length} pals (${Object.values(enrich).filter((e) => e.ignoreCombi).length} same-species-only)`);
-    return enrich;
+    const passives = parseSqlTable(sql, 'passiveskills')
+      .map((r) => ({ name: r.Name, ability: r.Ability, tier: r.Tier, description: r.Description }))
+      .filter((p) => p.name);
+    console.log(`  ${passives.length} passive skills`);
+    return { enrich, passives };
   } catch (e) {
     console.warn(`  ! enrichment failed (${e.message}) — continuing without`);
-    return {};
+    return { enrich: {}, passives: [] };
   }
 }
 
@@ -534,7 +538,7 @@ async function fetchMapImage() {
 async function main() {
   await mkdir(DATA, { recursive: true });
   const atlas = await fetchAtlas();
-  const [zhNames, fandom, enrich, mounts, wikigg] = await Promise.all([
+  const [zhNames, fandom, { enrich, passives }, mounts, wikigg] = await Promise.all([
     fetchZhNames(), fetchFandomPois(), fetchEnrichment(), fetchMounts(), fetchWikiggPois(),
   ]);
   // localize predator names ("Predator <EN name>" → "狂暴 <zh>")
@@ -581,6 +585,7 @@ async function main() {
   await writeJSON('enrich.json', Object.fromEntries(Object.entries(enrich).map(([id, e]) => [id, {
     description: e.description, drops: e.drops, partnerSkill: e.partnerSkill, skills: e.skills,
   }])));
+  await writeJSON('passives.json', passives);
   await writeJSON('breeding.json', atlas.breeding);
   await writeJSON('items.json', atlas.itemsIdx.records.map(({ id, name, description, category, subcategory, rarity, rank, weight, price, maxStack }) => ({ id, name, description, category, subcategory, rarity, rank, weight, price, maxStack })));
 

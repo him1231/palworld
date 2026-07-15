@@ -3,7 +3,7 @@ import { loadBreeding, loadPals, useData } from '../lib/data';
 import type { Pal } from '../lib/types';
 import { palDisplayName } from '../lib/i18n';
 import { PalIcon, PalPicker } from '../components/shared';
-import { breedChild, buildBreedingModel, findParents } from '../lib/breeding';
+import { breedChild, buildBreedingModel, findParents, shortestPath } from '../lib/breeding';
 import { Link } from 'react-router-dom';
 
 export default function BreedingPage() {
@@ -14,6 +14,8 @@ export default function BreedingPage() {
   const [parentA, setParentA] = useState<Pal | null>(null);
   const [parentB, setParentB] = useState<Pal | null>(null);
   const [target, setTarget] = useState<Pal | null>(null);
+  const [routeFrom, setRouteFrom] = useState<Pal | null>(null);
+  const [routeTo, setRouteTo] = useState<Pal | null>(null);
 
   const child = useMemo(() => {
     if (!model || !parentA || !parentB) return null;
@@ -24,6 +26,11 @@ export default function BreedingPage() {
     if (!model || !target) return null;
     return findParents(model, target.id);
   }, [model, target]);
+
+  const route = useMemo(() => {
+    if (!model || !routeFrom || !routeTo) return undefined;
+    return shortestPath(model, routeFrom.id, routeTo.id);
+  }, [model, routeFrom, routeTo]);
 
   if (!pals || !model) return <div className="page">載入中…</div>;
 
@@ -54,6 +61,38 @@ export default function BreedingPage() {
                 </div>
               </div>
             </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>最短配種路徑(A 一路配到 B)</h2>
+          <p className="sub" style={{ marginTop: 0 }}>由你手上嗰隻開始,每一代同任何寵配,最少幾多代配到目標?</p>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <SelectedRow label="起點" pal={routeFrom} onClear={() => setRouteFrom(null)} />
+            {!routeFrom && <PalPicker pals={pals} onPick={setRouteFrom} />}
+            <SelectedRow label="目標" pal={routeTo} onClear={() => setRouteTo(null)} />
+            {!routeTo && <PalPicker pals={pals} onPick={setRouteTo} />}
+          </div>
+          {route !== undefined && routeFrom && routeTo && (
+            route === null ? (
+              <p className="sub" style={{ marginTop: 10 }}>搵唔到路徑 —— 目標可能係限同種配種(只可以捉/同種配)。</p>
+            ) : route.length === 0 ? (
+              <p className="sub" style={{ marginTop: 10 }}>起點同目標係同一隻。</p>
+            ) : (
+              <div className="pair-grid" style={{ marginTop: 10 }}>
+                <p className="sub" style={{ margin: 0 }}>共 {route.length} 代:</p>
+                {route.map((s, i) => (
+                  <div className="pair-row" key={i}>
+                    <span className="count-badge">第{i + 1}代</span>
+                    <Link className="pal-mini" to={`/pal/${s.parent.id}`}><PalIcon pal={s.parent} size={22} />{palDisplayName(s.parent)}</Link>
+                    <span className="arrow">×</span>
+                    <Link className="pal-mini" to={`/pal/${s.partner.id}`}><PalIcon pal={s.partner} size={22} />{palDisplayName(s.partner)}</Link>
+                    <span className="arrow">→</span>
+                    <Link className="pal-mini" to={`/pal/${s.child.id}`}><PalIcon pal={s.child} size={22} />{palDisplayName(s.child)}</Link>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
 

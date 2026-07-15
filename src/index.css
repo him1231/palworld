@@ -285,6 +285,17 @@ button[data-tip], a[data-tip] { cursor: pointer; }
 .elem-line { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--surface-2); border-radius: var(--radius-sm); flex-wrap: wrap; }
 .arrow { color: var(--ink-3); }
 
+/* ============ bases page ============ */
+.base-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.base-card h3 { margin: 0; font-size: 15px; }
+.base-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.base-head .coords { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+.base-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.base-desc { color: var(--ink-2); font-size: 13px; margin: 0 0 10px; }
+.base-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.danger-note { color: var(--spawn-day); font-size: 12px; }
+.base-foot a.chip:hover { text-decoration: none; }
+
 /* ============ responsive ============ */
 @media (max-width: 800px) {
   .sidebar {

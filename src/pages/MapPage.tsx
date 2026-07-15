@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import type { Pal, Poi, PoiCategory, RegionId, SpawnPoint } from '../lib/types';
 import {
@@ -97,6 +98,7 @@ export default function MapPage() {
   const [cursor, setCursor] = useState<[number, number] | null>(null);
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
   const [palFilter, setPalFilter] = useState('');
+  const [searchParams] = useSearchParams();
 
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -185,6 +187,24 @@ export default function MapPage() {
   }, [regionInfo, ready]);
 
   useEffect(() => () => { mapRef.current?.remove(); mapRef.current = null; }, []);
+
+  // deep link: /map?x=180&y=-39&label=守護者礦峰 drops a highlighted pin
+  useEffect(() => {
+    const map = mapRef.current;
+    const x = Number(searchParams.get('x')), y = Number(searchParams.get('y'));
+    if (!ready || !map || !searchParams.has('x') || Number.isNaN(x) || Number.isNaN(y)) return;
+    const label = searchParams.get('label') ?? `(${x}, ${y})`;
+    const mk = L.marker([y, x], {
+      icon: L.divIcon({
+        className: '', iconSize: [30, 30], iconAnchor: [15, 28], popupAnchor: [0, -26],
+        html: '<div style="font-size:26px;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.8))">📍</div>',
+      }),
+      zIndexOffset: 2000,
+    }).addTo(map);
+    mk.bindPopup(`<div class="popup-title">${esc(label)}</div><div class="popup-sub">(${x}, ${y})</div>`);
+    const t = setTimeout(() => { map.flyTo([y, x], 1, { duration: 0.8 }); mk.openPopup(); }, 300);
+    return () => { clearTimeout(t); mk.remove(); };
+  }, [ready, searchParams]);
 
   // ---- POI + alpha layer ----
   useEffect(() => {
