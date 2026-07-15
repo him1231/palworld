@@ -15,7 +15,7 @@
  *  - Palpagos world map underlay: palworld.wiki.gg World_Map.webp (8192×8192).
  */
 import { mkdir, writeFile, readFile, access } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -207,7 +207,9 @@ async function fetchEnrichment() {
     const rows = parseSqlTable(sql, 'pals');
     const enrich = {};
     for (const r of rows) {
-      const id = r.Asset;
+      // SQL Asset names use spaces for variants ("TentacleTurtle Ground");
+      // atlas ids use underscores — normalize to the atlas convention.
+      const id = r.Asset ? String(r.Asset).replace(/ /g, '_') : null;
       if (!id) continue;
       const aura = tryJSON(r.Aura);
       const breeding = tryJSON(r.Breeding);
@@ -228,7 +230,7 @@ async function fetchEnrichment() {
     }
     console.log(`  enriched ${Object.keys(enrich).length} pals (${Object.values(enrich).filter((e) => e.ignoreCombi).length} same-species-only)`);
     const passives = parseSqlTable(sql, 'passiveskills')
-      .map((r) => ({ name: r.Name, ability: r.Ability, tier: r.Tier, description: r.Description }))
+      .map((r) => ({ name: r.Name, devName: r.DevName, ability: r.Ability, tier: r.Tier, description: r.Description }))
       .filter((p) => p.name);
     console.log(`  ${passives.length} passive skills`);
     return { enrich, passives };
@@ -301,6 +303,84 @@ async function fetchWikiggPois() {
     console.warn(`  ! wiki.gg markers failed (${e.message}) — skipped`);
     return { cats: [], pois: [] };
   }
+}
+
+// ---------------------------------------------------- zh-TW localization
+const stripTags = (s) => s.replace(/<[^>]+>/g, '').replace(/\\n|\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** items / active skills / partner skills from paldb list pages, passives from op.gg */
+async function fetchZhTexts() {
+  console.log('[2.8] zh-TW texts (items / skills / partner / passives)…');
+  const out = { items: {}, actives: {}, partner: {}, passives: {} };
+
+  try {
+    const html = await getText('https://paldb.cc/tw/Items');
+    // card: data-hover="?s=Items%2F<id>" href…><img src=…T_itemicon_<file>.webp…>
+    //       <a class="itemname" …>中文名</a><div>中文說明</div>
+    const re = /data-hover="\?s=Items%2F([A-Za-z0-9_]+)"[^>]*><img[^>]*T_itemicon_([A-Za-z0-9_]+)\.webp[\s\S]*?class="itemname"[^>]*>([^<]+)<\/a>(?:<div>([\s\S]*?)<\/div>)?/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const [, id, iconFile, name, desc] = m;
+      if (!out.items[id]) out.items[id] = { name: name.trim(), desc: desc ? stripTags(desc) : null, icon: iconFile };
+    }
+    console.log(`  items: ${Object.keys(out.items).length}`);
+  } catch (e) { console.warn(`  ! items zh failed (${e.message})`); }
+
+  try {
+    const html = await getText('https://paldb.cc/tw/Active_Skills');
+    // card: <a data-hover="?s=Waza%2F…" href="<EN_slug>" class="element_color_XX">中文名</a> … <div class="card-body">中文說明</div>
+    const re = /data-hover="\?s=Waza%2F[^"]*"\s+href="([A-Za-z0-9_'-]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<div class="card-body">([\s\S]*?)<\/div>/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const [, slug, name, desc] = m;
+      if (!out.actives[slug]) out.actives[slug] = { name: name.trim(), desc: stripTags(desc) };
+    }
+    console.log(`  active skills: ${Object.keys(out.actives).length}`);
+  } catch (e) { console.warn(`  ! active skills zh failed (${e.message})`); }
+
+  try {
+    const html = await getText('https://paldb.cc/tw/Partner_Skill');
+    // per-pal card keyed on the icon URL (carries the internal id on every card)
+    const re = /PalIcon\/Normal\/T_([A-Za-z0-9_]+)_icon_normal\.webp[\s\S]*?夥伴技能[\s\S]*?<span class="ms-2">([^<]+)<\/span>[\s\S]*?<div class="flex-grow-1 ms-2">([\s\S]*?)<\/div>/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const [, palId, name, desc] = m;
+      if (!out.partner[palId]) out.partner[palId] = { name: name.trim(), desc: stripTags(desc) };
+    }
+    console.log(`  partner skills: ${Object.keys(out.partner).length}`);
+  } catch (e) { console.warn(`  ! partner skills zh failed (${e.message})`); }
+
+  try {
+    const html = await getText('https://op.gg/zh-tw/palworld/skills/passive');
+    // card: aria-label="<zh名> 查看詳細資訊" … href="/zh-tw/palworld/skills/passive/<slug>" … description nearby
+    const re = /aria-label="([^"]+?) 查看詳細資訊"[^>]*href="\/zh-tw\/palworld\/skills\/passive\/([a-z0-9_-]+)"/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const [, name, slug] = m;
+      const norm = slug.replace(/_pal$/, '');
+      if (!out.passives[norm]) out.passives[norm] = { name: name.trim() };
+    }
+    console.log(`  passives: ${Object.keys(out.passives).length}`);
+  } catch (e) { console.warn(`  ! passives zh failed (${e.message})`); }
+
+  return out;
+}
+
+async function fetchItemIcons(itemsZh) {
+  if (SKIP_IMAGES) {
+    const dir = path.join(PUB, 'img', 'items');
+    return existsSync(dir) ? new Set(readdirSync(dir)) : new Set();
+  }
+  const dir = path.join(PUB, 'img', 'items');
+  await mkdir(dir, { recursive: true });
+  const files = [...new Set(Object.values(itemsZh).map((i) => i.icon).filter(Boolean))];
+  let ok = 0;
+  await pool(files, 8, async (f) => {
+    const dest = path.join(dir, `${f}.webp`);
+    if (await downloadImage(`https://cdn.paldb.cc/image/Others/InventoryItemIcon/Texture/T_itemicon_${f}.webp`, dest, { Referer: 'https://paldb.cc/' })) ok++;
+  });
+  console.log(`  item icons: ${ok}/${files.length}`);
+  return new Set(readdirSync(dir));
 }
 
 // ------------------------------------------------- paldb 1.0 map database
@@ -666,9 +746,10 @@ async function fetchMapImage() {
 async function main() {
   await mkdir(DATA, { recursive: true });
   const atlas = await fetchAtlas();
-  const [zhNames, { enrich, passives }, mounts, paldbMap] = await Promise.all([
-    fetchZhNames(), fetchEnrichment(), fetchMounts(), fetchPaldbMap(),
+  const [zhNames, { enrich, passives }, mounts, paldbMap, zhTexts] = await Promise.all([
+    fetchZhNames(), fetchEnrichment(), fetchMounts(), fetchPaldbMap(), fetchZhTexts(),
   ]);
+  const itemIconFiles = await fetchItemIcons(zhTexts.items);
   let poiOut = paldbMap;
   if (!poiOut) {
     // legacy fallback: Fandom static POIs + wiki.gg bounty/predator fragments
@@ -722,12 +803,36 @@ async function main() {
   });
   await writeJSON('pals.json', pals);
   // heavier per-pal text (drops / skills / partner skill / description) lives separately
+  const itemZhByEnName = {};
+  for (const r of atlas.itemsIdx.records) {
+    if (zhTexts.items[r.id]?.name && !itemZhByEnName[r.name]) itemZhByEnName[r.name] = zhTexts.items[r.id].name;
+  }
   await writeJSON('enrich.json', Object.fromEntries(Object.entries(enrich).map(([id, e]) => [id, {
-    description: e.description, drops: e.drops, partnerSkill: e.partnerSkill, skills: e.skills,
+    description: e.description,
+    drops: (e.drops ?? []).map((d) => ({ ...d, nameZh: itemZhByEnName[d.name] ?? null })),
+    partnerSkill: e.partnerSkill ? {
+      ...e.partnerSkill,
+      nameZh: zhTexts.partner[id]?.name ?? null,
+      descZh: zhTexts.partner[id]?.desc ?? null,
+    } : null,
+    skills: (e.skills ?? []).map((s) => {
+      const zh = zhTexts.actives[String(s.name ?? '').replace(/ /g, '_')];
+      return { ...s, nameZh: zh?.name ?? null, descZh: zh?.desc ?? null };
+    }),
   }])));
-  await writeJSON('passives.json', passives);
+  await writeJSON('passives.json', passives.map((p) => {
+    const norm = String(p.devName ?? '').toLowerCase().replace(/^passive_/, '').replace(/_pal$/, '');
+    return { ...p, nameZh: zhTexts.passives[norm]?.name ?? null };
+  }));
   await writeJSON('breeding.json', atlas.breeding);
-  await writeJSON('items.json', atlas.itemsIdx.records.map(({ id, name, description, category, subcategory, rarity, rank, weight, price, maxStack }) => ({ id, name, description, category, subcategory, rarity, rank, weight, price, maxStack })));
+  await writeJSON('items.json', atlas.itemsIdx.records.map(({ id, name, description, category, subcategory, rarity, rank, weight, price, maxStack }) => {
+    const zh = zhTexts.items[id];
+    const iconFile = zh?.icon && itemIconFiles.has(`${zh.icon}.webp`) ? `${zh.icon}.webp` : null;
+    return {
+      id, name, description, category, subcategory, rarity, rank, weight, price, maxStack,
+      nameZh: zh?.name ?? null, descZh: zh?.desc ?? null, icon: iconFile,
+    };
+  }));
 
   // map data
   const nameZhFor = (palId) => zhNames[palId] || null;

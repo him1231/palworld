@@ -426,7 +426,7 @@ let layerPois = null, layerSpawns = null, layerBase = null;
 
 function regionPois() {
   const alphaPois = D.alphas.filter(a => a.region === mapState.region).map((a, i) => ({
-    id: 'alpha-' + mapState.region + '-' + i, cat: 'alpha',
+    id: 'alpha-' + mapState.region + '-' + i, cat: 'alpha', palId: a.palId,
     x: a.x, y: a.y, name: 'Lv' + a.level + ' ' + (a.nameZh || a.name),
   }));
   const statics = mapState.region === 'palpagos' ? D.pois.pois : [];
@@ -472,7 +472,12 @@ function renderPois() {
     if (!mapState.catOn[cat.id]) return;
     (byCat.get(cat.id) || []).forEach(p => {
       if (mapState.pinOff.has(p.id)) return;
-      L.marker([p.y, p.x], { icon: pinIcon(cat.color, cat.glyph) })
+      let ic = pinIcon(cat.color, cat.glyph);
+      if (p.palId && (p.palId in spIdx)) {
+        ic = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
+          html: '<div style="position:relative;border-radius:50%;border:2.5px solid ' + cat.color + ';background:#0b0d12;width:26px;height:26px;overflow:hidden">' + icon(p.palId, 21) + '</div><span style="position:absolute;top:-9px;right:-7px;font-size:10px">👑</span>' });
+      }
+      L.marker([p.y, p.x], { icon: ic })
         .bindPopup('<b>' + esc(p.name) + '</b><br><span style="color:#8a8f9c;font-size:12px">' + esc(cat.nameZh) + ' · (' + Math.round(p.x) + ', ' + Math.round(p.y) + ')</span>')
         .addTo(layerPois);
     });

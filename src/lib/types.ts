@@ -40,9 +40,9 @@ export interface Pal {
 
 export interface PalEnrich {
   description: string | null;
-  drops: { name: string; min: number; max: number; rate: number }[];
-  partnerSkill: { name: string; description: string | null } | null;
-  skills: { name: string; type: string; level: number; power: number; cooldown: number; description: string | null }[];
+  drops: { name: string; nameZh?: string | null; min: number; max: number; rate: number }[];
+  partnerSkill: { name: string; nameZh?: string | null; description: string | null; descZh?: string | null } | null;
+  skills: { name: string; nameZh?: string | null; type: string; level: number; power: number; cooldown: number; description: string | null; descZh?: string | null }[];
 }
 
 export interface BreedingData {
@@ -61,6 +61,10 @@ export interface Item {
   weight: number;
   price: number;
   maxStack: number;
+  nameZh: string | null;
+  descZh: string | null;
+  /** filename under /img/items/ */
+  icon: string | null;
 }
 
 export interface PoiCategory {
@@ -119,6 +123,8 @@ export type SpawnIndex = Record<RegionId, Record<string, number>>;
 
 export interface PassiveSkill {
   name: string;
+  nameZh?: string | null;
+  devName?: string | null;
   ability: string | null;
   tier: number;
   description: string | null;

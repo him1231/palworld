@@ -96,14 +96,14 @@ export default function PalDetailPage() {
 
         {enrich?.partnerSkill && (
           <div className="card">
-            <h2>夥伴技能 — {enrich.partnerSkill.name}</h2>
-            <p style={{ color: 'var(--ink-2)', margin: 0 }}>{enrich.partnerSkill.description}</p>
+            <h2>夥伴技能 — {enrich.partnerSkill.nameZh ?? enrich.partnerSkill.name}</h2>
+            <p style={{ color: 'var(--ink-2)', margin: 0 }}>{enrich.partnerSkill.descZh ?? enrich.partnerSkill.description}</p>
             {enrich.drops.length > 0 && (
               <>
                 <h2 style={{ marginTop: 14 }}>掉落物</h2>
                 {enrich.drops.map((d, i) => (
                   <div className="kv" key={i}>
-                    <span className="k">{d.name}</span>
+                    <span className="k">{d.nameZh ?? d.name}</span>
                     <span>{d.min === d.max ? d.min : `${d.min}–${d.max}`} 個 · {d.rate}%</span>
                   </div>
                 ))}
@@ -124,11 +124,14 @@ export default function PalDetailPage() {
                   {enrich.skills.map((s, i) => (
                     <tr key={i}>
                       <td className="num">{s.level}</td>
-                      <td>{s.name}</td>
-                      <td><img src={elementIconUrl(s.type === 'Neutral' ? 'Normal' : s.type)} alt="" style={{ width: 18, height: 18, verticalAlign: '-4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} /> {s.type}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{s.nameZh ?? s.name}</div>
+                        {s.nameZh && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{s.name}</div>}
+                      </td>
+                      <td><img src={elementIconUrl(s.type === 'Neutral' ? 'Normal' : s.type)} alt="" style={{ width: 18, height: 18, verticalAlign: '-4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} /></td>
                       <td className="num">{s.power || '—'}</td>
                       <td className="num">{s.cooldown}s</td>
-                      <td style={{ whiteSpace: 'normal', minWidth: 240, fontSize: 12.5, color: 'var(--ink-2)' }}>{s.description}</td>
+                      <td style={{ whiteSpace: 'normal', minWidth: 240, fontSize: 12.5, color: 'var(--ink-2)' }}>{s.descZh ?? s.description}</td>
                     </tr>
                   ))}
                 </tbody>

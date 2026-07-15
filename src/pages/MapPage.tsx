@@ -32,6 +32,20 @@ function esc(s: string) {
   return d.innerHTML;
 }
 
+/** round pal-face marker with a coloured ring (spawn points / alpha pins) */
+function palFaceIcon(iconUrl: string, ring: string, size = 26, crown = false) {
+  return L.divIcon({
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+    html: `<div style="position:relative;width:${size}px;height:${size}px">`
+      + `<img src="${iconUrl}" style="width:100%;height:100%;border-radius:50%;border:2.5px solid ${ring};background:#0b0d12;box-shadow:0 1px 4px rgba(0,0,0,.75)" alt=""/>`
+      + (crown ? `<span style="position:absolute;top:-9px;right:-6px;font-size:11px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.8))">👑</span>` : '')
+      + '</div>',
+  });
+}
+
 function pinIcon(cat: PoiCategory) {
   if (cat.icon) {
     return L.divIcon({
@@ -105,7 +119,7 @@ export default function MapPage() {
   const [pinFilter, setPinFilter] = useState('');
   const [spawnSel, setSpawnSel] = useState<SpawnSel[]>([]);
   const [dayNight, setDayNight] = useState<'all' | 'day' | 'night'>('all');
-  const [spawnMode, setSpawnMode] = useState<'points' | 'circles'>('circles');
+  const [spawnMode, setSpawnMode] = useState<'points' | 'circles'>('points');
   const [spawnData, setSpawnData] = useState<Record<string, SpawnPoint[]>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cursor, setCursor] = useState<[number, number] | null>(null);
@@ -239,9 +253,12 @@ export default function MapPage() {
           `<div class="popup-sub">${esc(cat.nameZh)}${poi.cd ? ` · 重生 ${esc(poi.cd)}` : ''} · (${Math.round(poi.x)}, ${Math.round(poi.y)})</div>` +
           (pal ? `<a href="${asset(`/pal/${pal.id}`)}">睇 ${esc(palDisplayName(pal))} 詳細 →</a>` : '') +
           `</div>`;
-        const mk = asDots
-          ? L.circleMarker([poi.y, poi.x], { radius: 5, color: '#0b0d12', weight: 1.5, fillColor: catColor(cat), fillOpacity: 0.95 })
-          : L.marker([poi.y, poi.x], { icon: pinIcon(cat) });
+        const palIcon = pal ? palIconUrl(pal) : null;
+        const mk = cat.id === 'alpha' && palIcon
+          ? L.marker([poi.y, poi.x], { icon: palFaceIcon(palIcon, '#e66767', 28, true) })
+          : asDots
+            ? L.circleMarker([poi.y, poi.x], { radius: 5, color: '#0b0d12', weight: 1.5, fillColor: catColor(cat), fillOpacity: 0.95 })
+            : L.marker([poi.y, poi.x], { icon: pinIcon(cat) });
         mk.bindPopup(popup).addTo(group);
       }
     }
@@ -296,12 +313,16 @@ export default function MapPage() {
         if (dayNight !== 'day' && nightPts.length) mk(nightPts, true);
       } else {
         const show = dayNight === 'night' ? filtered : dayNight === 'day' ? dayPts : filtered;
+        const palIcon = pal ? palIconUrl(pal) : null;
+        const useFaces = palIcon && show.length <= 400;
         for (const p of show) {
           const night = p[2] === 1;
-          L.circleMarker([p[1], p[0]], {
-            radius: 4.5, color: '#0b0d12', weight: 1.5,
-            fillColor: sel.color, fillOpacity: night ? 0.25 : 0.95,
-          }).bindPopup(
+          (useFaces
+            ? L.marker([p[1], p[0]], { icon: palFaceIcon(palIcon, sel.color, night ? 20 : 24), opacity: night ? 0.75 : 1 })
+            : L.circleMarker([p[1], p[0]], {
+              radius: 4.5, color: '#0b0d12', weight: 1.5,
+              fillColor: sel.color, fillOpacity: night ? 0.25 : 0.95,
+            })).bindPopup(
             `<div><div class="popup-title">${esc(name)}</div>` +
             `<div class="popup-sub">Lv ${p[3]}–${p[4]} · ${night ? '夜間限定' : '日夜都出'}${p[5] != null ? ` · 出現率約 ${p[5]}%` : ''} · (${Math.round(p[0])}, ${Math.round(p[1])})</div></div>`,
           ).addTo(group);

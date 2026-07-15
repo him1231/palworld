@@ -15,7 +15,7 @@ export default function PassivesPage() {
     const s = q.trim().toLowerCase();
     return passives
       .filter((p) => (tier == null || p.tier === tier)
-        && (!s || p.name.toLowerCase().includes(s) || (p.ability ?? '').toLowerCase().includes(s) || (p.description ?? '').toLowerCase().includes(s)))
+        && (!s || p.name.toLowerCase().includes(s) || (p.nameZh ?? '').toLowerCase().includes(s) || (p.ability ?? '').toLowerCase().includes(s) || (p.description ?? '').toLowerCase().includes(s)))
       .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
   }, [passives, q, tier]);
 
@@ -43,7 +43,10 @@ export default function PassivesPage() {
           <tbody>
             {rows.map((p, i) => (
               <tr key={i}>
-                <td style={{ fontWeight: 600 }}>{p.name}</td>
+                <td>
+                  <div style={{ fontWeight: 600 }}>{p.nameZh ?? p.name}</div>
+                  {p.nameZh && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{p.name}</div>}
+                </td>
                 <td style={{ color: 'var(--ink-2)' }}>{p.ability}</td>
                 <td className="num">
                   <span style={{ color: TIER_COLOR[p.tier] ?? 'var(--ink-2)', fontWeight: 700 }}>{p.tier}</span>
