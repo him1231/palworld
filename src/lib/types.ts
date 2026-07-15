@@ -83,6 +83,8 @@ export interface Poi {
   y: number;
   name: string;
   link: string | null;
+  /** respawn cooldown, e.g. "30 Mins" */
+  cd?: string;
 }
 
 export interface PoiData { groups?: string[]; cats: PoiCategory[]; pois: Poi[] }

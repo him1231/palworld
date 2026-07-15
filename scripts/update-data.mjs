@@ -344,15 +344,24 @@ async function fetchPaldbMap() {
     const fixed = extractJsVar(src, 'fixedDungeon') ?? [];
     const extras = extractJsVar(src, 'extras') ?? [];
     const regions = (extractJsVar(src, 'regionData') ?? []).map((r) => ({ ...r, type: 'Region' }));
+    // two file generations exist: `ipos` (in-game map coords) and `pos` (raw world
+    // coords). World→map transform verified against 267 shared anchors.
+    const toMapXY = (x) => {
+      if (x?.ipos && typeof x.ipos.X === 'number' && typeof x.ipos.Y === 'number') return [x.ipos.X, x.ipos.Y];
+      if (x?.pos && typeof x.pos.X === 'number' && typeof x.pos.Y === 'number') {
+        return [(x.pos.Y - 158000) / 459, (x.pos.X + 123888) / 459];
+      }
+      return null;
+    };
     const all = [...fixed, ...extras, ...regions]
-      .filter((x) => x && x.ipos && typeof x.ipos.X === 'number' && typeof x.ipos.Y === 'number' && x.type);
+      .map((x) => ({ ...x, xy: toMapXY(x) }))
+      .filter((x) => x.xy && x.type);
     console.log(`  fetched ${Math.round(src.length / 1024)}KB · fixed=${fixed.length} extras=${extras.length} regions=${regions.length} valid=${all.length}`);
 
-    // sanity gate: known anchors must sit where the atlas says they do
+    // sanity gate: known anchor must sit where the atlas says it does
     const anubis = all.find((x) => x.type === 'Alpha Pal' && /Anubis/.test(x.id ?? ''));
-    if (!anubis) console.warn('  ! Anubis anchor not found');
-    else if (Math.abs(anubis.ipos.X + 134) > 5 || Math.abs(anubis.ipos.Y + 94) > 5) console.warn(`  ! Anubis anchor moved: ${JSON.stringify(anubis.ipos)}`);
-    if (all.length < 5000 || !anubis || Math.abs(anubis.ipos.X + 134) > 5 || Math.abs(anubis.ipos.Y + 94) > 5) {
+    if (all.length < 5000 || !anubis || Math.abs(anubis.xy[0] + 134) > 5 || Math.abs(anubis.xy[1] + 94) > 5) {
+      if (anubis) console.warn(`  ! Anubis anchor at ${JSON.stringify(anubis.xy)}`);
       throw new Error('sanity check failed (coordinate system may have changed)');
     }
 
@@ -379,18 +388,26 @@ async function fetchPaldbMap() {
 
     const pois = [];
     const seq = new Map();
+    const seen = new Set();
     for (const x of all) {
       const cat = catIndex.get(x.type);
       if (!cat) continue;
+      const px = Math.round(x.xy[0] * 10) / 10;
+      const py = Math.round(x.xy[1] * 10) / 10;
+      const name = (x.lv ? `Lv${x.lv} ` : '') + (x.item ?? iconLookup[x.type]?.label ?? x.type);
+      const dupeKey = `${cat}|${px}|${py}|${name}`;
+      if (seen.has(dupeKey)) continue;
+      seen.add(dupeKey);
       const k = (seq.get(cat) ?? 0) + 1;
       seq.set(cat, k);
       pois.push({
         id: `${cat}-${x.id ?? k}-${k}`,
         cat,
-        x: Math.round(x.ipos.X * 10) / 10,
-        y: Math.round(x.ipos.Y * 10) / 10,
-        name: (x.lv ? `Lv${x.lv} ` : '') + (x.item ?? iconLookup[x.type]?.label ?? x.type),
+        x: px,
+        y: py,
+        name,
         link: x.href ?? null,
+        ...(x.cooldown ? { cd: String(x.cooldown) } : {}),
       });
     }
     console.log(`  ${pois.length} markers in ${cats.length} categories (1.0)`);

@@ -236,7 +236,7 @@ export default function MapPage() {
         const iconHtml = pal && palIconUrl(pal) ? `<img src="${palIconUrl(pal)}" style="width:34px;height:34px;border-radius:50%;float:left;margin-right:8px" alt=""/>` : '';
         const popup =
           `<div>${iconHtml}<div class="popup-title">${esc(poi.name)}</div>` +
-          `<div class="popup-sub">${esc(cat.nameZh)} · (${Math.round(poi.x)}, ${Math.round(poi.y)})</div>` +
+          `<div class="popup-sub">${esc(cat.nameZh)}${poi.cd ? ` · 重生 ${esc(poi.cd)}` : ''} · (${Math.round(poi.x)}, ${Math.round(poi.y)})</div>` +
           (pal ? `<a href="${asset(`/pal/${pal.id}`)}">睇 ${esc(palDisplayName(pal))} 詳細 →</a>` : '') +
           `</div>`;
         const mk = asDots
