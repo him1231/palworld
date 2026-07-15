@@ -6,12 +6,19 @@ import {
   palIconUrl, useData,
 } from '../lib/data';
 import { palDisplayName } from '../lib/i18n';
-import { PalIcon, PalPicker } from '../components/shared';
+import { PalIcon } from '../components/shared';
 
 /** dark-mode categorical slots (dataviz reference palette) for selected pals */
 const PAL_COLORS = ['#3987e5', '#199e70', '#c98500', '#008300', '#9085e9', '#e66767', '#d55181', '#d95926'];
 
 const ALPHA_CAT: PoiCategory = { id: 'alpha', name: 'Alpha Boss', nameZh: 'Alpha 頭目', color: '#e66767', glyph: '王' };
+
+/** sidebar sections (op.gg-style grouping) */
+const CAT_GROUPS: { id: string; name: string; catIds: string[] }[] = [
+  { id: 'explore', name: '地點', catIds: ['fast_travel', 'tower', 'dungeon', 'sealed_realm'] },
+  { id: 'collect', name: '收集品', catIds: ['effigy', 'statue_power', 'journal', 'chest', 'egg', 'skill_fruit'] },
+  { id: 'enemy', name: '敵人', catIds: ['alpha', 'bounty', 'predator', 'poacher_camp'] },
+];
 
 interface SpawnSel { palId: string; color: string }
 
@@ -88,6 +95,8 @@ export default function MapPage() {
   const [spawnData, setSpawnData] = useState<Record<string, SpawnPoint[]>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [cursor, setCursor] = useState<[number, number] | null>(null);
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
+  const [palFilter, setPalFilter] = useState('');
 
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -321,58 +330,83 @@ export default function MapPage() {
           type="search" placeholder="篩選標記名稱…" value={pinFilter}
           onChange={(e) => setPinFilter(e.target.value)}
         />
-        {cats.map((cat) => {
-          const pois = (poisByCat.get(cat.id) ?? []).filter(
-            (p) => !pinFilter || p.name.toLowerCase().includes(pinFilter.toLowerCase()),
-          );
-          if (!pois.length && pinFilter) return null;
-          const isOpen = expanded === cat.id;
-          const offCount = pois.filter((p) => pinOff.has(p.id)).length;
+        {CAT_GROUPS.map((g) => {
+          const groupCats = cats.filter((c) => g.catIds.includes(c.id) && (poisByCat.get(c.id)?.length ?? 0) > 0);
+          if (!groupCats.length) return null;
+          const groupOpen = !closedGroups.has(g.id);
+          const total = groupCats.reduce((n, c) => n + (poisByCat.get(c.id)?.length ?? 0), 0);
+          const setGroup = (on: boolean) => setCatOn((cur) => {
+            const next = { ...cur };
+            for (const c of groupCats) next[c.id] = on;
+            return next;
+          });
           return (
-            <div className="cat-row" key={cat.id}>
-              <div className="cat-head">
-                <label>
-                  <input type="checkbox" checked={!!catOn[cat.id]} onChange={() => toggleCat(cat.id)} />
-                  <span className="cat-glyph" style={{ background: cat.color }}>{cat.glyph}</span>
-                  <span>{cat.nameZh}</span>
-                  <span className="count-badge">{pois.length - offCount}/{pois.length}</span>
-                </label>
-                <button className="cat-expand" onClick={() => setExpanded(isOpen ? null : cat.id)}>
-                  {isOpen ? '▲' : '▼'}
+            <div key={g.id} className="cat-group">
+              <div className="group-head">
+                <button
+                  className="group-toggle"
+                  onClick={() => setClosedGroups((cur) => {
+                    const next = new Set(cur);
+                    if (next.has(g.id)) next.delete(g.id); else next.add(g.id);
+                    return next;
+                  })}
+                >
+                  {groupOpen ? '▾' : '▸'} {g.name}
+                  <span className="count-badge">{total}</span>
                 </button>
+                <button className="locate" onClick={() => setGroup(true)}>全開</button>
+                <button className="locate" onClick={() => setGroup(false)}>全關</button>
               </div>
-              {isOpen && (
-                <div className="pin-list">
-                  <div className="pin-row" style={{ borderBottom: '1px solid var(--hairline)' }}>
-                    <button className="locate" onClick={() => setAllPins(cat.id, true)}>全開</button>
-                    <button className="locate" onClick={() => setAllPins(cat.id, false)}>全關</button>
-                  </div>
-                  {pois.map((p) => (
-                    <div className="pin-row" key={p.id}>
+              {groupOpen && groupCats.map((cat) => {
+                const pois = (poisByCat.get(cat.id) ?? []).filter(
+                  (p) => !pinFilter || p.name.toLowerCase().includes(pinFilter.toLowerCase()),
+                );
+                if (!pois.length && pinFilter) return null;
+                const isOpen = expanded === cat.id;
+                const offCount = pois.filter((p) => pinOff.has(p.id)).length;
+                return (
+                  <div className="cat-row" key={cat.id}>
+                    <div className="cat-head">
                       <label>
-                        <input
-                          type="checkbox"
-                          checked={!pinOff.has(p.id)}
-                          onChange={() => togglePin(p.id)}
-                        />
-                        <span className="pin-name">{p.name}</span>
+                        <input type="checkbox" checked={!!catOn[cat.id]} onChange={() => toggleCat(cat.id)} />
+                        <span className="cat-glyph" style={{ background: cat.color }}>{cat.glyph}</span>
+                        <span>{cat.nameZh}</span>
+                        <span className="count-badge">{pois.length - offCount}/{pois.length}</span>
                       </label>
-                      <button className="locate" title="喺地圖顯示" onClick={() => locate(p)}>◎</button>
+                      <button className="cat-expand" onClick={() => setExpanded(isOpen ? null : cat.id)}>
+                        {isOpen ? '▲' : '▼'}
+                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {isOpen && (
+                      <div className="pin-list">
+                        <div className="pin-row" style={{ borderBottom: '1px solid var(--hairline)' }}>
+                          <button className="locate" onClick={() => setAllPins(cat.id, true)}>全開</button>
+                          <button className="locate" onClick={() => setAllPins(cat.id, false)}>全關</button>
+                        </div>
+                        {pois.map((p) => (
+                          <div className="pin-row" key={p.id}>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={!pinOff.has(p.id)}
+                                onChange={() => togglePin(p.id)}
+                              />
+                              <span className="pin-name">{p.name}</span>
+                            </label>
+                            <button className="locate" title="喺地圖顯示" onClick={() => locate(p)}>◎</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
 
         <h3>帕魯出現範圍</h3>
         <div className="spawn-controls">
-          <PalPicker
-            pals={pals.filter((p) => (spawnIndex[region]?.[p.id] ?? 0) > 0)}
-            onPick={addSpawnPal}
-            placeholder="加入帕魯（最多 8 隻）…"
-          />
           {spawnSel.map((sel) => {
             const pal = byId.get(sel.palId);
             if (!pal) return null;
@@ -398,10 +432,30 @@ export default function MapPage() {
                 <button className={dayNight === 'night' ? 'on' : ''} onClick={() => setDayNight('night')}>🌙 夜間</button>
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                實線/實心＝日夜都出現;虛線/空心＝夜間限定。
+                實線/實心＝日夜都出現;虛線/空心＝夜間限定。最多同時顯示 {PAL_COLORS.length} 隻。
               </div>
             </>
           )}
+          <input
+            type="search" placeholder="搜尋帕魯(中/英文名)…" value={palFilter}
+            onChange={(e) => setPalFilter(e.target.value)}
+          />
+          <div className="spawn-results">
+            {pals
+              .filter((p) => (spawnIndex[region]?.[p.id] ?? 0) > 0 && !spawnSel.some((s) => s.palId === p.id))
+              .filter((p) => {
+                const s = palFilter.trim().toLowerCase();
+                return !s || (p.nameZh ?? '').toLowerCase().includes(s) || p.name.toLowerCase().includes(s) || p.id.toLowerCase().includes(s);
+              })
+              .sort((a, b) => a.paldexNumber - b.paldexNumber)
+              .map((p) => (
+                <button key={p.id} className="spawn-result-row" onClick={() => addSpawnPal(p)}>
+                  <PalIcon pal={p} size={24} />
+                  <span>{palDisplayName(p)}</span>
+                  <span className="cnt">{spawnIndex[region]?.[p.id]} 點</span>
+                </button>
+              ))}
+          </div>
         </div>
       </div>
 
