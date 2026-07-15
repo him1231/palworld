@@ -64,7 +64,7 @@ async function fetchWithRetry(url, opts = {}, tries = 3) {
   }
 }
 const getJSON = async (url) => (await fetchWithRetry(url)).json();
-const getText = async (url) => (await fetchWithRetry(url)).text();
+const getText = async (url, opts) => (await fetchWithRetry(url, opts)).text();
 
 async function pool(items, n, fn) {
   const out = [];
@@ -337,16 +337,21 @@ const slugify = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-
 async function fetchPaldbMap() {
   console.log('[3.2] paldb 1.0 map database…');
   try {
-    const src = await getText('https://paldb.cc/js/map_data_tw.js');
+    const src = await getText(`https://paldb.cc/js/map_data_tw.js?_=${Date.now()}`, {
+      headers: { Referer: 'https://paldb.cc/tw/Palpagos_Islands', Accept: '*/*' },
+    });
     const iconLookup = extractJsVar(src, 'iconLookup') ?? {};
     const fixed = extractJsVar(src, 'fixedDungeon') ?? [];
     const extras = extractJsVar(src, 'extras') ?? [];
     const regions = (extractJsVar(src, 'regionData') ?? []).map((r) => ({ ...r, type: 'Region' }));
     const all = [...fixed, ...extras, ...regions]
       .filter((x) => x && x.ipos && typeof x.ipos.X === 'number' && typeof x.ipos.Y === 'number' && x.type);
+    console.log(`  fetched ${Math.round(src.length / 1024)}KB · fixed=${fixed.length} extras=${extras.length} regions=${regions.length} valid=${all.length}`);
 
     // sanity gate: known anchors must sit where the atlas says they do
     const anubis = all.find((x) => x.type === 'Alpha Pal' && /Anubis/.test(x.id ?? ''));
+    if (!anubis) console.warn('  ! Anubis anchor not found');
+    else if (Math.abs(anubis.ipos.X + 134) > 5 || Math.abs(anubis.ipos.Y + 94) > 5) console.warn(`  ! Anubis anchor moved: ${JSON.stringify(anubis.ipos)}`);
     if (all.length < 5000 || !anubis || Math.abs(anubis.ipos.X + 134) > 5 || Math.abs(anubis.ipos.Y + 94) > 5) {
       throw new Error('sanity check failed (coordinate system may have changed)');
     }
