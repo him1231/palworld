@@ -420,7 +420,7 @@ function makePicker(container, placeholder, list, onPick) {
 // ---------- 地圖 ----------
 let MAP = null;
 const PAL_COLORS = ['#3987e5', '#199e70', '#c98500', '#008300', '#9085e9', '#e66767', '#d55181', '#d95926'];
-const mapState = { region: 'palpagos', catOn: { alpha: 1, fast_travel: 1, tower: 1 }, pinOff: new Set(), expanded: null, sel: [], dn: 'all' };
+const mapState = { region: 'palpagos', catOn: {}, pinOff: new Set(), expanded: null, sel: [], dn: 'all' };
 const ALPHA_CAT = { id: 'alpha', nameZh: 'Alpha 頭目', color: '#e66767', glyph: '王' };
 let layerPois = null, layerSpawns = null, layerBase = null;
 

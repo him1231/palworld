@@ -99,7 +99,7 @@ export default function MapPage() {
   const spawnIndex = useData(loadSpawnIndex);
 
   const [region, setRegion] = useState<RegionId>('palpagos');
-  const [catOn, setCatOn] = useState<Record<string, boolean>>({ fast_travel: true, 'fast-travel': true, tower: true, alpha: true });
+  const [catOn, setCatOn] = useState<Record<string, boolean>>({});
   const [pinOff, setPinOff] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pinFilter, setPinFilter] = useState('');
